@@ -91,7 +91,8 @@ class MySQLDB {
                         )";
 
     $q_gm_delete = "DELETE FROM EventGMs
-                     WHERE SessionID = :SessionID";
+                     WHERE SessionID = :SessionID
+                       AND PersonID = :PersonID";
     $q_gm_insert = "INSERT INTO EventGMs (
                       SessionID
                       , PersonID
@@ -154,8 +155,19 @@ class MySQLDB {
     $sth_person_select = $dbh->prepare($q_person_select);
     $sth_person_insert = $dbh->prepare($q_person_insert);
 
+    // Prepare the GM and Player data for comsumption later
+    $existing_gm_data = $this->prepareExistingGMData($dbh);
+    $existing_player_data = $this->prepareExistingPlayerData($dbh);
+
     // Insert everything into the DB
     foreach ($events as $key=>$event) {
+      //@TODO UNCOMMENT THIS ONCE JSON DATA IS AVABILABLE
+      // $startTimestamp = strtotime($event['startdate']);
+      // if ($startTimestamp < time()) {
+      //   // This event is the past, we don't need to process it
+      //   continue;
+      // }//end if
+
       $sth_event_select->bindValue(":EventName", $key);
 
       $sth_event_select->execute();
@@ -204,29 +216,48 @@ class MySQLDB {
 
           $db_session = $sth_session_select->fetch(PDO::FETCH_ASSOC);
           $sessionID = $db_session['SessionID'];
-        }
+        }//end else
 
-        // Clear all GMs for this session
-        $sth_gm_delete->bindValue(":SessionID", $sessionID);
-        $sth_gm_delete->execute();
+        // Get the person ID(s) of the GMs already in the DB
+        $existing_gm_ids = array_keys($existing_gm_data[$sessionID]);
+        $parsed_gm_ids = array();
 
         // Insert the GM details into the DB
         foreach ($session['gms'] as $gm) {
 
           // Fetch the person ID
-          $personID = $this->ReturnPersonID($sth_person_select
-                                            , $sth_person_insert
-                                            , $gm['name']
-                                            , $gm['email']
-                                            , (isset($gm['pfs']) ? $gm['pfs'] : null));
+          $personID = $this->insertAndGetPersonID($sth_person_select
+                                                  , $sth_person_insert
+                                                  , $gm['name']
+                                                  , $gm['email']
+                                                  , (isset($gm['pfs']) ? $gm['pfs'] : null));
 
-          $sth_gm_insert->bindValue(":SessionID", $sessionID);
-          $sth_gm_insert->bindValue(":PersonID", $personID);
-          $sth_gm_insert->bindValue(":SignedUpOn", $gm['signed_up_at']);
+          if (false === array_search($personID, $existing_gm_ids)) {
+            // This GM isn't already in the list, insert it
+            $sth_gm_insert->bindValue(":SessionID", $sessionID);
+            $sth_gm_insert->bindValue(":PersonID", $personID);
+            $sth_gm_insert->bindValue(":SignedUpOn", $gm['signed_up_at']);
 
-          $sth_gm_insert->execute();
+            $sth_gm_insert->execute();
+          }
+
+          // Add this GM to the list of GMs (for use in determining which GMs
+          // are no longer needed in the DB)
+          $parsed_gm_ids[] = $personID;
+
         }//end foreach($gm)
 
+        // Check if there are GMs to remove
+        $gms_to_remove = array_diff($existing_gm_ids, $parsed_gm_ids);
+        if (count($gms_to_remove) > 0) {
+          // We have GMs to remove
+          foreach($gms_to_remove as $gm_to_remove) {
+            $sth_gm_delete->bindValue(":SessionID", $sessionID);
+            $sth_gm_delete->bindValue(":PersonID", $gm_to_remove);
+
+            $sth_gm_delete->execute();
+          }//end foreach
+        }//end if
 
         // Clear all Players for this session
         $sth_player_delete->bindValue(":SessionID", $sessionID);
@@ -235,11 +266,11 @@ class MySQLDB {
         // Insert the players for this session
         foreach ($session['players'] as $player) {
           $i++;
-          $personID = $this->ReturnPersonID($sth_person_select
-                                            , $sth_person_insert
-                                            , $player['name']
-                                            , $player['email']
-                                            , (isset($player['pfs']) ? $player['pfs'] : null));
+          $personID = $this->insertAndGetPersonID($sth_person_select
+                                                  , $sth_person_insert
+                                                  , $player['name']
+                                                  , $player['email']
+                                                  , (isset($player['pfs']) ? $player['pfs'] : null));
           $sth_player_insert->bindValue(":SessionID", $sessionID);
           $sth_player_insert->bindValue(":PersonID", $personID);
           $sth_player_insert->bindValue(":SignedUpOn", $player['signed_up_at']);
@@ -259,7 +290,7 @@ class MySQLDB {
     echo "Known person miss: " . $this->known_person_miss . "\n";
   }//END function storeAllDataToDB($events)
 
-  private function ReturnPersonID ($sth_select, $sth_insert, $personName, $personEMail, $personPFSNumber) {
+  private function insertAndGetPersonID ($sth_select, $sth_insert, $personName, $personEMail, $personPFSNumber) {
     // First check if we already have the person ID for the supplied email
     if (isset($this->known_person_IDs[$personEMail])) {
       $this->known_person_hit++;
@@ -296,8 +327,72 @@ class MySQLDB {
 
       return $db_person['PersonID'];
     }//end else
-  }//END private function ReturnPersonID($sth_select, $sth_insert, $personName, $personEMail, $personPFSNumber)
+  }//END private function insertAndGetPersonID($sth_select, $sth_insert, $personName, $personEMail, $personPFSNumber)
 
+  private function prepareExistingGMData($dbh) {
+
+    // @TODO add WHERE E.EventStartTimestamp >= CURRENT_TIMESTAMP()
+    $q = "SELECT EG.ID
+                 , EG.SessionID
+                 , EG.PersonID
+                 , EG.SignedUpOn
+                 , PM.PersonEMail
+            FROM EventGMs EG
+                 LEFT JOIN Sessions S
+                   LEFT JOIN Events E
+                     ON S.EventID = E.ID
+                   ON EG.SessionID = S.SessionID
+                 INNER JOIN PersonMaster PM
+                   ON EG.PersonID = PM.PersonID
+           ORDER BY EG.SessionID ASC
+                    , EG.ID";
+
+      $sth = $dbh->prepare($q);
+
+      $sth->execute();
+
+      $result = $sth->fetchAll(PDO::FETCH_ASSOC);
+
+      $retval = array();
+
+      foreach($result as $gm) {
+        $retval[$gm['SessionID']][$gm['PersonID']] = $gm;
+      }
+
+      return $retval;
+    }//END private funciton prepareExistingGMData($dbh)
+
+
+    private function prepareExistingPlayerData($dbh) {
+      // @TODO add WHERE E.EventStartTimestamp >= CURRENT_TIMESTAMP()
+      $q = "SELECT EP.ID
+                   , EP.SessionID
+                   , EP.PersonID
+                   , EP.SignedUpOn
+                   , PM.PersonEMail
+                   , EP.CharacterClass
+                   , EP.CharacterRole
+              FROM EventPlayers EP
+                   LEFT JOIN Sessions S
+                     LEFT JOIN Events E
+                       ON S.EventID = E.ID
+                     ON EP.SessionID = S.SessionID
+                   INNER JOIN PersonMaster PM
+                     ON EP.PersonID = PM.PersonID
+             ORDER BY EP.SessionID ASC
+                      , EP.ID";
+
+      $sth = $dbh->prepare($q);
+      $sth->execute();
+      $result = $sth->fetchAll(PDO::FETCH_ASSOC);
+
+      $retval = array();
+      foreach($result as $player) {
+        $retval[$player['SessionID']][$player['PersonID']] = $player;
+      }
+
+      return $retval;
+    }//END private function prepareExistingPlayerData($dbh)
 }//END class MySQLDB
 
 $db = new MySQLDB();
