@@ -1,16 +1,20 @@
 <?php
 
    function RetrieveEventJSONData() {
+      if (USE_LOCAL_JSON_FILE) {
+         return ParseLocalJSONFile();
+      }//end if
+
       // URLs we will be using
-      $login_url = "https://www.warhorn.net/users/login";
-      $json_url = "https://www.warhorn.net/events/pfs-uae/manage/sessions/participants.json";
+      $login_url = WARHORN_LOGIN_URL;
+      $json_url = WARHORN_EVENT_JSON_URL;
 
       // UserAgent string to use for easier identification in the logs
       $user_agent = "PHP_Gameday_Attendee_List_EMail_Alert_Client";
 
       // POST arguments we need to send. Replace with your own username and password
-      $postArgs = Array('user[login]' => "tarekf@tarekfadel.com"
-                          , 'user[password]' => "9Z74t7vAj#m4@2QmaY@@Ta464x"
+      $postArgs = Array('user[login]' => WARHORN_USERNAME
+                          , 'user[password]' => WARHORN_PASSWORD
                           , 'user[remember_me]' => "0"
                           , 'commit' => "Log in");
 
@@ -81,7 +85,7 @@
       // Check if we have been redirected to the dashboard (indicating a successful login)
       $curl_info = curl_getinfo($ch);
       if ("https://www.warhorn.net/dashboard" != $curl_info['url']) {
-         echo "Login Faild!";
+         return -1;
       } else {
          // We are logged in, retrieve the JSON file
 
@@ -122,6 +126,16 @@
 
       return $retval;
    }//END function ImplodeArrayToPostArgs
+
+
+   function ParseLocalJSONFile(){
+
+      $file = file_get_contents("local.json");
+
+      return json_decode($file, true);
+
+   }//END function ParseLocalJSONFile()
+
 
    function PrintArray($arr) {
       if (!is_array($arr)) {
