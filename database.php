@@ -9,7 +9,8 @@
  * @category warhorn-gameday-tools
  * @package  warhorn-gameday-tools
  * @author Tarek Fadel <dev@tarekfadel.com>
- * @since October 30, 2014
+ * @since 2014-10-30
+ * @version  v0.01
  */
 
 /**
@@ -25,7 +26,8 @@ require_once("constants.php");
  * @category warhorn-gameday-tools
  * @package  warhorn-gameday-tools
  * @author Tarek Fadel <dev@tarekfadel.com>
- * @since October 30, 2014
+ * @since 2014-10-30
+ * @version v0.01
  */
 class MySQLDB {
 
