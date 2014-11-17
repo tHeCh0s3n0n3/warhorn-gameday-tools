@@ -12,6 +12,9 @@
  * @since 2014-10-30
  * @version  v0.01
  */
+namespace WarhornGamedayTools;
+
+use PDO;
 
 /**
  * Contains the DB_* constants we use to connect to the DB
