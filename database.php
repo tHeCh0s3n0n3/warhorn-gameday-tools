@@ -26,6 +26,8 @@ class MySQLDB {
                      , DB_USERNAME
                      , DB_PASSWORD
                      , array(PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8"));
+
+      // $dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     } catch (PDOException $e) {
       return null;
     }
@@ -51,9 +53,9 @@ class MySQLDB {
     $q_event_select = "SELECT COUNT(ID) AS \"EventCount\"
                               , ID
                          FROM Events
-                        WHERE EventName = :EventName";
-                          // AND EventStartTimestamp = :EventStartTimestamp
-                          // AND EventEndTimestamp = :EventEndTimestamp";
+                        WHERE EventName = :EventName
+                          AND EventStartTimestamp = :EventStartTimestamp
+                          AND EventEndTimestamp = :EventEndTimestamp";
     $q_event_insert = "INSERT INTO Events (
                           EventName
                           , EventStartTimestamp
@@ -159,16 +161,23 @@ class MySQLDB {
     $existing_gm_data = $this->prepareExistingGMData($dbh);
     $existing_player_data = $this->prepareExistingPlayerData($dbh);
 
+    // header("Content-Type: text/json");
+    // echo json_encode($events);
+    // die();
+    //echo "<pre>\n"; print_r($events); echo "</pre>\n";
+
     // Insert everything into the DB
     foreach ($events as $key=>$event) {
       //@TODO UNCOMMENT THIS ONCE JSON DATA IS AVABILABLE
-      // $startTimestamp = strtotime($event['startdate']);
+      // $startTimestamp = strtotime($event['starts-at']);
       // if ($startTimestamp < time()) {
       //   // This event is the past, we don't need to process it
       //   continue;
       // }//end if
 
       $sth_event_select->bindValue(":EventName", $key);
+      $sth_event_select->bindValue(":EventStartTimestamp", $event['starts-at']);
+      $sth_event_select->bindValue(":EventEndTimestamp", $event['ends-at']);
 
       $sth_event_select->execute();
       $db_event = $sth_event_select->fetch(PDO::FETCH_ASSOC);
@@ -180,23 +189,33 @@ class MySQLDB {
       } else {
         // This event doesn't exist, create it
         $sth_event_insert->bindValue(":EventName", $key);
-        $sth_event_insert->bindValue(":EventStartTimestamp", "0000-00-00 00:00:00");
-        $sth_event_insert->bindValue(":EventEndTimestamp", "0000-00-00 00:00:00");
+        $sth_event_insert->bindValue(":EventStartTimestamp", $event['starts-at']);
+        $sth_event_insert->bindValue(":EventEndTimestamp", $event['ends-at']);
 
         $sth_event_insert->execute();
+        $this->errorHandler($sth_event_insert->errorInfo(), "Event insert");
 
         // Get the newly inserted ID
+        $sth_event_select->execute();
+        $this->errorHandler($sth_event_select->errorInfo(), "Event select after insert");
         $db_event = $sth_event_select->fetch(PDO::FETCH_ASSOC);
         $eventID = $db_event['ID'];
       }//end else
 
       foreach ($event as $sessionNumber=>$session) {
 
+        // Check if we are processing the start-timestamp or end-timestamp array element
+        if (!is_numeric($sessionNumber)) {
+          // There is nothing to process here, skip this entry
+          continue;
+        }//end if
+
         $sth_session_select->bindValue(":EventID", $eventID);
         $sth_session_select->bindValue(":SessionNumber", $sessionNumber);
         $sth_session_select->bindValue(":ScenarioName", $session['scenario-name']);
 
         $sth_session_select->execute();
+        $this->errorHandler($sth_session_select->errorInfo(), "Session select");
 
         $db_session = $sth_session_select->fetch(PDO::FETCH_ASSOC);
 
@@ -213,13 +232,20 @@ class MySQLDB {
           $sth_session_insert->bindValue(":TableCount", $session['table-count']);
 
           $sth_session_insert->execute();
+          $this->errorHandler($sth_session_insert->errorInfo(), "Session insert");
 
+          $sth_session_select->execute();
+          $this->errorHandler($sth_session_select->errorInfo(), "Session select after insert");
           $db_session = $sth_session_select->fetch(PDO::FETCH_ASSOC);
           $sessionID = $db_session['SessionID'];
         }//end else
 
         // Get the person ID(s) of the GMs already in the DB
-        $existing_gm_ids = array_keys($existing_gm_data[$sessionID]);
+        if (is_array($existing_gm_data) && isset($existing_gm_data[$sessionID])) {
+          $existing_gm_ids = array_keys($existing_gm_data[$sessionID]);
+        } else {
+          $existing_gm_ids = array();
+        }
         $parsed_gm_ids = array();
 
         // Insert the GM details into the DB
@@ -230,7 +256,7 @@ class MySQLDB {
                                                   , $sth_person_insert
                                                   , $gm['name']
                                                   , $gm['email']
-                                                  , (isset($gm['pfs']) ? $gm['pfs'] : null));
+                                                  , $gm['pfs_number']);
 
           if (false === array_search($personID, $existing_gm_ids)) {
             // This GM isn't already in the list, insert it
@@ -270,7 +296,7 @@ class MySQLDB {
                                                   , $sth_person_insert
                                                   , $player['name']
                                                   , $player['email']
-                                                  , (isset($player['pfs']) ? $player['pfs'] : null));
+                                                  , $player['pfs_number']);
           $sth_player_insert->bindValue(":SessionID", $sessionID);
           $sth_player_insert->bindValue(":PersonID", $personID);
           $sth_player_insert->bindValue(":SignedUpOn", $player['signed_up_at']);
@@ -393,6 +419,12 @@ class MySQLDB {
 
       return $retval;
     }//END private function prepareExistingPlayerData($dbh)
+
+    private function errorHandler($errorInfo, $friendlyName) {
+      if ("00000" != $errorInfo[0]) {
+        echo "{$friendlyName} [{$errorInfo[0]}]: SQL Error ({$errorInfo[1]}): {$errorInfo[2]}\n";
+      }
+    }
 }//END class MySQLDB
 
 $db = new MySQLDB();
