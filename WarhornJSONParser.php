@@ -8,7 +8,7 @@ class WarhornJSONParser {
 
   private $allEvents = array();
 
-  public function parseWarhornJSON($json) {
+  public function parseJSON($json) {
     $slots = $json['slots'];
 
     $this->allEvents = array();
@@ -41,7 +41,7 @@ class WarhornJSONParser {
           $eventData[$i]['gms'][] = array("name" => $gm['name']
                                           , "email" => $gm['email']
                                           , "signed_up_at" => $gm['signed_up_at']
-                                          , "pfs_number" => extractPFSNumber($gm)
+                                          , "pfs_number" => $this->extractPFSNumber($gm)
                                          );
         }//end foreach ($gm)
 
@@ -49,7 +49,7 @@ class WarhornJSONParser {
           $eventData[$i]['players'][] = array("name" => $player['name']
                                               , "email" => $player['email']
                                               , "signed_up_at" => $player['signed_up_at']
-                                              , "pfs_number" => extractPFSNumber($player)
+                                              , "pfs_number" => $this->extractPFSNumber($player)
                                               , "character-class" => (isset($player['character']['classes'][0]) ? $player['character']['classes'][0] : "")
                                               , "character-role" => (isset($player['character']['combatrole']) ? $player['character']['combatrole'] : "")
                                              );
@@ -63,7 +63,7 @@ class WarhornJSONParser {
     }//end foreach ($slot)
 
     return $this->allEvents;
-  }//END public function parseWarhornJSON($json)
+  }//END public function parseJSON($json)
 
   public function getAllEvents() {
     if (count($this->allEvents) > 0) {

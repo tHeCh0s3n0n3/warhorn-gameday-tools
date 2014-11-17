@@ -8,8 +8,9 @@ require_once("database.php");
 
 
 $json = RetrieveEventJSONData();
-// PrintArray($allEvents);
+
+$events = $warhornJSONParser->parseJSON($json);
 
 // Save the info to the DB
-$db->storeAllDataToDB($allEvents);
+$db->storeAllDataToDB($events);
 echo "done\n";
