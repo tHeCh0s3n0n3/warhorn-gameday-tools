@@ -1,23 +1,63 @@
 <?php
+/**
+ * database.php
+ *
+ * The Database class is meant to simplify the task of
+ * inserting, changing and accessing information
+ * to/from the DB.
+ *
+ * @category warhorn-gameday-tools
+ * @package  warhorn-gameday-tools
+ * @author Tarek Fadel <dev@tarekfadel.com>
+ * @since October 30, 2014
+ */
 
+/**
+ * Contains the DB_* constants we use to connect to the DB
+ */
+require_once("constants.php");
+
+/**
+ * This takes care of ALL the database interactions. It is
+ * instanticated from within this file. This class's main
+ * purpose is to sperate all DB logic from everything else
+ *
+ * @category warhorn-gameday-tools
+ * @package  warhorn-gameday-tools
+ * @author Tarek Fadel <dev@tarekfadel.com>
+ * @since October 30, 2014
+ */
 class MySQLDB {
 
   /**
-   * This array holds the known person IDs so we don't have to keep hitting the DB
-   * It is in the format of "E-Mail address"=>"PersonID". To check, just use isset().
+   * This array holds the known person IDs so we don't
+   * have to keep hitting the DB. It is in the format
+   * of "E-Mail address"=>"PersonID". To check, just
+   * use isset().
+   *
+   * @var array
    */
   private $known_person_IDs = array();
 
+  /**
+   * Used for keeping track of information used for debugging.
+   *
+   * @var integer
+   */
   private $known_person_hit = 0;
   private $known_person_miss = 0;
 
+  /**
+   * MySQLDB default constructor.
+   */
   function MySQLDB() {}
 
   /**
-   * connect - Creates the PHP Database Object PDO and
+   * Creates the PHP Database Object PDO and
    * returns it.
    *
    * @return PDO A connection to the DB using PDO or FALSE on failure
+   *
    * @throws PDOException if the connection attempt fails
    */
   function connect(){
@@ -26,8 +66,6 @@ class MySQLDB {
                      , DB_USERNAME
                      , DB_PASSWORD
                      , array(PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8"));
-
-      // $dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     } catch (PDOException $e) {
       return null;
     }
@@ -36,7 +74,7 @@ class MySQLDB {
   }//END function Connect()
 
   /**
-   * disconnect - Closes the supplied PDO connection
+   * Closes the supplied PDO connection
    *
    * @param PDO connection we want to close
    */
@@ -44,21 +82,32 @@ class MySQLDB {
     $dbh = null;
   }//END function disconnect($dbh)
 
+  /**
+   * Saves new data and removes data which is no longer valid from the DB.
+   *
+   * @param  array $events The entire event data previously prepared.
+   *
+   * @return null This function does not return anything.
+   */
   function storeAllDataToDB($events) {
+    // Initialize the DB connection
     $dbh = $this->connect();
 
+    // For keeping track of some statistics used in debugging.
     $numberofGMsTotal = 0;
     $numberofGMsInserted = 0;
     $numberofPlayersTotal = 0;
     $numberOfPlayersInserted = 0;
 
     // Prepare our SQL queries
+    /* EVENT */
     $q_event_select = "SELECT COUNT(ID) AS \"EventCount\"
                               , ID
                          FROM Events
                         WHERE EventName = :EventName
                           AND EventStartTimestamp = :EventStartTimestamp
                           AND EventEndTimestamp = :EventEndTimestamp";
+
     $q_event_insert = "INSERT INTO Events (
                           EventName
                           , EventStartTimestamp
@@ -71,12 +120,14 @@ class MySQLDB {
                           , CURRENT_TIMESTAMP()
                        )";
 
+    /* SESSION */
     $q_session_select = "SELECT COUNT(SessionID) AS \"SessionCount\"
                                 , SessionID
                            FROM Sessions
                           WHERE EventID = :EventID
                             AND SessionNumber = :SessionNumber
                             AND ScenarioName  = :ScenarioName";
+
     $q_session_insert = "INSERT INTO Sessions (
                           EventID
                           , SessionNumber
@@ -95,9 +146,11 @@ class MySQLDB {
                           , CURRENT_TIMESTAMP()
                         )";
 
+    /* GM */
     $q_gm_delete = "DELETE FROM EventGMs
                      WHERE SessionID = :SessionID
                        AND PersonID = :PersonID";
+
     $q_gm_insert = "INSERT INTO EventGMs (
                       SessionID
                       , PersonID
@@ -110,9 +163,11 @@ class MySQLDB {
                       , CURRENT_TIMESTAMP()
                     )";
 
+    /* PLAYER */
     $g_player_delete = "DELETE FROM EventPlayers
                          WHERE SessionID = :SessionID
                            AND PersonID = :PersonID";
+
     $g_player_insert = "INSERT INTO EventPlayers (
                           SessionID
                           , PersonID
@@ -129,10 +184,12 @@ class MySQLDB {
                           , CURRENT_TIMESTAMP()
                         )";
 
+    /* PERSON */
     $q_person_select = "SELECT COUNT(PersonID) AS \"PersonCount\"
                                , PersonID
                           FROM PersonMaster
                          WHERE PersonEMail = :PersonEMail";
+
     $q_person_insert = "INSERT INTO PersonMaster (
                           PersonName
                           , PersonEMail
@@ -164,6 +221,8 @@ class MySQLDB {
     // Prepare the GM and Player data for comsumption later
     $existing_gm_data = $this->prepareExistingGMData($dbh);
     $existing_player_data = $this->prepareExistingPlayerData($dbh);
+
+    /*** Event ***/
 
     // Insert everything into the DB
     foreach ($events as $key=>$event) {
@@ -199,10 +258,13 @@ class MySQLDB {
         // Get the newly inserted ID
         $sth_event_select->execute();
         $this->errorHandler($sth_event_select->errorInfo(), "Event select after insert");
+
+        // Extract the eventID
         $db_event = $sth_event_select->fetch(PDO::FETCH_ASSOC);
         $eventID = $db_event['ID'];
       }//end else
 
+      /*** Session ***/
       foreach ($event as $sessionNumber=>$session) {
 
         // Check if we are processing the start-timestamp or end-timestamp array element
@@ -238,21 +300,23 @@ class MySQLDB {
           $sth_session_insert->execute();
           $this->errorHandler($sth_session_insert->errorInfo(), "Session insert");
 
+          // Get the newly inserted ID
           $sth_session_select->execute();
           $this->errorHandler($sth_session_select->errorInfo(), "Session select after insert");
+
+          // Extract the sessionID
           $db_session = $sth_session_select->fetch(PDO::FETCH_ASSOC);
           $sessionID = $db_session['SessionID'];
         }//end else
 
         /*** GMs ***/
-
         $existing_gm_ids = array();
         $parsed_gm_ids = array();
 
         // Get the person ID(s) of the GMs already in the DB
         if (is_array($existing_gm_data) && isset($existing_gm_data[$sessionID])) {
           $existing_gm_ids = array_keys($existing_gm_data[$sessionID]);
-        }
+        }//end if
 
         // Insert the GM details into the DB
         foreach ($session['gms'] as $gm) {
@@ -298,7 +362,6 @@ class MySQLDB {
         }//end if
 
         /*** Players ***/
-
         $existing_player_ids = array();
         $parsed_player_ids = array();
 
@@ -356,20 +419,26 @@ class MySQLDB {
 
     $this->disconnect($dbh);
 
-    echo "GMs: Total: {$numberofGMsTotal} | Newly Inserted: {$numberofGMsInserted}\n";
-    echo "Players: Total: {$numberofPlayersTotal} | Newly Inserted: {$numberOfPlayersInserted}\n";
-    echo "Known person hit: " . $this->known_person_hit . "\n";
-    echo "Known person miss: " . $this->known_person_miss . "\n";
+    // Only ouput these statistics of debugging is enabled
+    if (DEBUG) {
+      echo "GMs: Total: {$numberofGMsTotal} | Newly Inserted: {$numberofGMsInserted}\n";
+      echo "Players: Total: {$numberofPlayersTotal} | Newly Inserted: {$numberOfPlayersInserted}\n";
+      echo "Known person hit: " . $this->known_person_hit . "\n";
+      echo "Known person miss: " . $this->known_person_miss . "\n";
+    }//end if
   }//END function storeAllDataToDB($events)
 
   /**
-   * [insertAndGetPersonID description]
-   * @param  [type] $sth_select      [description]
-   * @param  [type] $sth_insert      [description]
-   * @param  [type] $personName      [description]
-   * @param  [type] $personEMail     [description]
-   * @param  [type] $personPFSNumber [description]
-   * @return [type]                  [description]
+   * Takes care of inserting people records into the DB and returning the resulting ID. This function
+   * will also use a list of known IDs in order to minimize expensive DB access.
+   *
+   * @param  PDOStatement $sth_select      The previously prepared PDOStatement for selecting a single person record from the DB.
+   * @param  PDOStatement $sth_insert      The previously prepared PDOStatement for inserting a person record into the DB.
+   * @param  string       $personName      Name of the person record being inserted.
+   * @param  string       $personEMail     E-Mail address of the person record being inserted.
+   * @param  string       $personPFSNumber PFS Number of the person record being inserted.
+   *
+   * @return int The database ID column for the inserted (or cached) person record.
    */
   private function insertAndGetPersonID ($sth_select, $sth_insert, $personName, $personEMail, $personPFSNumber) {
     // First check if we already have the person ID for the supplied email
@@ -410,6 +479,13 @@ class MySQLDB {
     }//end else
   }//END private function insertAndGetPersonID($sth_select, $sth_insert, $personName, $personEMail, $personPFSNumber)
 
+  /**
+   * Prepares the GM data from the DB and returns it in an associative array.
+   *
+   * @param  PDO   $dbh The PDO object on which we can call PDO::prepare()
+   *
+   * @return array An associative array which holds all the GM data from the DB.
+   */
   private function prepareExistingGMData($dbh) {
 
     // @TODO add WHERE E.EventStartTimestamp >= CURRENT_TIMESTAMP()
@@ -443,43 +519,62 @@ class MySQLDB {
       return $retval;
     }//END private funciton prepareExistingGMData($dbh)
 
+  /**
+   * Prepares the Player data from the DB and returns it in an associative array.
+   *
+   * @param  PDO   $dbh The PDO object on which we can call PDO::prepare()
+   *
+   * @return array An associative array which holds all the player data from the DB.
+   */
+  private function prepareExistingPlayerData($dbh) {
+    // @TODO add WHERE E.EventStartTimestamp >= CURRENT_TIMESTAMP()
+    $q = "SELECT EP.ID
+                 , EP.SessionID
+                 , EP.PersonID
+                 , EP.SignedUpOn
+                 , PM.PersonEMail
+                 , EP.CharacterClass
+                 , EP.CharacterRole
+            FROM EventPlayers EP
+                 LEFT JOIN Sessions S
+                   LEFT JOIN Events E
+                     ON S.EventID = E.ID
+                   ON EP.SessionID = S.SessionID
+                 INNER JOIN PersonMaster PM
+                   ON EP.PersonID = PM.PersonID
+           ORDER BY EP.SessionID ASC
+                    , EP.ID";
 
-    private function prepareExistingPlayerData($dbh) {
-      // @TODO add WHERE E.EventStartTimestamp >= CURRENT_TIMESTAMP()
-      $q = "SELECT EP.ID
-                   , EP.SessionID
-                   , EP.PersonID
-                   , EP.SignedUpOn
-                   , PM.PersonEMail
-                   , EP.CharacterClass
-                   , EP.CharacterRole
-              FROM EventPlayers EP
-                   LEFT JOIN Sessions S
-                     LEFT JOIN Events E
-                       ON S.EventID = E.ID
-                     ON EP.SessionID = S.SessionID
-                   INNER JOIN PersonMaster PM
-                     ON EP.PersonID = PM.PersonID
-             ORDER BY EP.SessionID ASC
-                      , EP.ID";
+    $sth = $dbh->prepare($q);
+    $sth->execute();
+    $result = $sth->fetchAll(PDO::FETCH_ASSOC);
 
-      $sth = $dbh->prepare($q);
-      $sth->execute();
-      $result = $sth->fetchAll(PDO::FETCH_ASSOC);
-
-      $retval = array();
-      foreach($result as $player) {
-        $retval[$player['SessionID']][$player['PersonID']] = $player;
-      }
-
-      return $retval;
-    }//END private function prepareExistingPlayerData($dbh)
-
-    private function errorHandler($errorInfo, $friendlyName) {
-      if ("00000" != $errorInfo[0]) {
-        echo "{$friendlyName} [{$errorInfo[0]}]: SQL Error ({$errorInfo[1]}): {$errorInfo[2]}\n";
-      }
+    $retval = array();
+    foreach($result as $player) {
+      $retval[$player['SessionID']][$player['PersonID']] = $player;
     }
+
+    return $retval;
+  }//END private function prepareExistingPlayerData($dbh)
+
+  /**
+   * Takes core of displaying SQL errors (if there are any).
+   *
+   * @param  array  $errorInfo    Array from $sth->errorInfo().
+   * @param  string $friendlyName The friendly name which will prefix the error message.
+   *
+   * @return null This function does not return anything.
+   */
+  private function errorHandler($errorInfo, $friendlyName) {
+
+    if (DEBUG && "00000" != $errorInfo[0]) {
+      // only output the error if debugging is enabled.
+
+      echo "{$friendlyName} [{$errorInfo[0]}]: SQL Error ({$errorInfo[1]}): {$errorInfo[2]}\n";
+    }//end if
+
+  }//END private function errorHandler($errorInfo, $friendlyName)
+
 }//END class MySQLDB
 
 $db = new MySQLDB();
