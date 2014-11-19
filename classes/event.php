@@ -22,6 +22,6 @@ class Event extends MyObject {
    }//END function __constructor()
 
    public function addSession($session) {
-      $this->Sessions[] = $session;
+      $this->_Sessions[] = $session;
    }//END public function addSession($session)
 }

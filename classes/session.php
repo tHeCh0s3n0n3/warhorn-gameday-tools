@@ -30,10 +30,10 @@ class Session extends MyObject {
    }//END function __contruct()
 
    public function addGM($gm) {
-      $this->GM[] = $gm;
+      $this->_GMs[] = $gm;
    }//END public function addGM($gm)
 
    public function addPlayer($player) {
-      $this->Players[] = $player;
+      $this->_Players[] = $player;
    }//END public function addPlayer($player)
 }
