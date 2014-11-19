@@ -36,4 +36,20 @@ class Session extends MyObject {
    public function addPlayer($player) {
       $this->_Players[] = $player;
    }//END public function addPlayer($player)
+
+   public function setScenarioMinLevel($minLevel) {
+      if (null == $minLevel || !is_numeric($minLevel)) {
+         $this->_ScenarioMinLevel = 0;
+      } else {
+         $this->_ScenarioMinLevel = $minLevel;
+      }//end else
+   }//END public function setScenarioMinLevel($minLevel)
+
+   public function setScenarioMaxLevel($maxLevel) {
+      if (null == $maxLevel || !is_numeric($maxLevel)) {
+         $this->_ScenarioMaxLevel = 0;
+      } else {
+         $this->_ScenarioMaxLevel = $maxLevel;
+      }//end else
+   }//END public function setScenarioMaxLevel($maxLevel)
 }
