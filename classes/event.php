@@ -11,7 +11,7 @@ class Event extends MyObject {
    protected $_EventEnd;
    protected $_Sessions;
 
-   function __constructor() {
+   function __construct() {
 
       $this->_EventID = (int) 0;
       $this->_EventName = "";
@@ -19,7 +19,7 @@ class Event extends MyObject {
       $this->_EventEnd = (int) 0;
       $this->_Sessions = array();
 
-   }//END function __constructor()
+   }//END function __construct()
 
    public function addSession($session) {
       $this->_Sessions[] = $session;

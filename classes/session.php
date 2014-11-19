@@ -15,7 +15,7 @@ class Session extends MyObject {
    protected $_GMs;
    protected $_Players;
 
-   function __contruct() {
+   function __construct() {
 
       $this->_SessionID = (int) 0;
       $this->_EventID = (int) 0;
@@ -27,7 +27,7 @@ class Session extends MyObject {
       $this->_GMs = array();
       $this->_Players = array();
 
-   }//END function __contruct()
+   }//END function __construct()
 
    public function addGM($gm) {
       $this->_GMs[] = $gm;
