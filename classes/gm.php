@@ -1,4 +1,5 @@
 <?php
+namespace WarhornGamedayTools;
 
 require_once("person.php");
 

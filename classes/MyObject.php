@@ -1,4 +1,5 @@
 <?php
+namespace WarhornGamedayTools;
 
 abstract class MyObject {
 
@@ -24,6 +25,6 @@ abstract class MyObject {
             break;
       }//end switch
 
-      throw new Exception("Method \"{$method}\" does not exist and was not trapped in __call()");
+      throw new \Exception("Method \"{$method}\" does not exist and was not trapped in __call()");
    }//END public function __call($method, $args)
 }//END abstract class MyObject
