@@ -5,7 +5,7 @@ require_once("MyObject.php");
 
 class Person extends MyObject {
 
-   protected $_ID;
+   protected $_PersonID;
    protected $_Name;
    protected $_EMail;
    protected $_PFSNumber;
