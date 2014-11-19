@@ -94,7 +94,7 @@ class MySQLDB {
    *
    * @return null This function does not return anything.
    */
-  function storeAllDataToDB($events) {
+  function storeAllDataToDB(&$events) {
     // Initialize the DB connection
     $dbh = $this->connect();
 
@@ -160,11 +160,13 @@ class MySQLDB {
                       SessionID
                       , PersonID
                       , SignedUpOn
+                      , NotificationSent
                       , InsertedOn
                     ) VALUES (
                       :SessionID
                       , :PersonID
                       , :SignedUpOn
+                      , :NotificationSent
                       , CURRENT_TIMESTAMP()
                     )";
 
@@ -232,30 +234,28 @@ class MySQLDB {
     // Insert everything into the DB
     foreach ($events as $key=>$event) {
       //@TODO UNCOMMENT THIS ONCE JSON DATA IS AVABILABLE
-      // $startTimestamp = strtotime($event['starts-at']);
-      // if ($startTimestamp < time()) {
+      // if ($event->getEventStart() < time()) {
       //   // This event is the past, we don't need to process it
       //   continue;
       // }//end if
 
       $sth_event_select->bindValue(":EventName", $key);
-      $sth_event_select->bindValue(":EventStartTimestamp", $event['starts-at']);
-      $sth_event_select->bindValue(":EventEndTimestamp", $event['ends-at']);
+      $sth_event_select->bindValue(":EventStartTimestamp", date("c", $event->getEventStart()));
+      $sth_event_select->bindValue(":EventEndTimestamp", date("c", $event->getEventEnd()));
 
       $sth_event_select->execute();
       $db_event = $sth_event_select->fetch(PDO::FETCH_ASSOC);
 
-      $eventID = 0;
       if (0 < $db_event['EventCount']) {
         // This event exists, no need to insert it
 
-        $eventID = $db_event['ID'];
+        $event->setEventID($db_event['ID']);
       } else {
         // This event doesn't exist, create it
 
         $sth_event_insert->bindValue(":EventName", $key);
-        $sth_event_insert->bindValue(":EventStartTimestamp", $event['starts-at']);
-        $sth_event_insert->bindValue(":EventEndTimestamp", $event['ends-at']);
+        $sth_event_insert->bindValue(":EventStartTimestamp", date("c", $event->getEventStart()));
+        $sth_event_insert->bindValue(":EventEndTimestamp", date("c", $event->getEventEnd()));
 
         $sth_event_insert->execute();
         $this->errorHandler($sth_event_insert->errorInfo(), "Event insert");
@@ -266,22 +266,22 @@ class MySQLDB {
 
         // Extract the eventID
         $db_event = $sth_event_select->fetch(PDO::FETCH_ASSOC);
-        $eventID = $db_event['ID'];
+        $event->setEventID($db_event['ID']);
       }//end else
 
       /*** Session ***/
-      foreach ($event as $sessionNumber=>$session) {
+      foreach ($event->getSessions() as $sessionNumber=>$session) {
 
         // Check if we are processing the start-timestamp or end-timestamp array element
-        if (!is_numeric($sessionNumber)) {
-          // There is nothing to process here, skip this entry
+        // if (!is_numeric($sessionNumber)) {
+        //   // There is nothing to process here, skip this entry
 
-          continue;
-        }//end if
+        //   continue;
+        // }//end if
 
-        $sth_session_select->bindValue(":EventID", $eventID);
-        $sth_session_select->bindValue(":SessionNumber", $sessionNumber);
-        $sth_session_select->bindValue(":ScenarioName", $session['scenario-name']);
+        $sth_session_select->bindValue(":EventID", $event->getEventID());
+        $sth_session_select->bindValue(":SessionNumber", $session->getSessionNumber());
+        $sth_session_select->bindValue(":ScenarioName", $session->getScenarioName());
 
         $sth_session_select->execute();
         $this->errorHandler($sth_session_select->errorInfo(), "Session select");
@@ -291,16 +291,16 @@ class MySQLDB {
         if (0 < $db_session['SessionCount']) {
           // This session already exists, no need to insert it
 
-          $sessionID = $db_session['SessionID'];
+          $session->setSessionID($db_session['SessionID']);
         } else {
           // This session needs to be inserted
 
-          $sth_session_insert->bindValue(":EventID", $eventID);
-          $sth_session_insert->bindValue(":SessionNumber", $sessionNumber);
-          $sth_session_insert->bindValue(":ScenarioName", $session['scenario-name']);
-          $sth_session_insert->bindValue(":ScenarioMinLevel", $session['scenario-min-level']);
-          $sth_session_insert->bindValue(":ScenarioMaxLevel", $session['scenario-max-level']);
-          $sth_session_insert->bindValue(":TableCount", $session['table-count']);
+          $sth_session_insert->bindValue(":EventID", $event->getEventID());
+          $sth_session_insert->bindValue(":SessionNumber", $session->getSessionNumber());
+          $sth_session_insert->bindValue(":ScenarioName", $session->getScenarioName());
+          $sth_session_insert->bindValue(":ScenarioMinLevel", $session->getScenarioMinLevel());
+          $sth_session_insert->bindValue(":ScenarioMaxLevel", $session->getScenarioMaxLevel());
+          $sth_session_insert->bindValue(":TableCount", $session->getTableCount());
 
           $sth_session_insert->execute();
           $this->errorHandler($sth_session_insert->errorInfo(), "Session insert");
@@ -311,7 +311,7 @@ class MySQLDB {
 
           // Extract the sessionID
           $db_session = $sth_session_select->fetch(PDO::FETCH_ASSOC);
-          $sessionID = $db_session['SessionID'];
+          $session->setSessionID($db_session['SessionID']);
         }//end else
 
         /*** GMs ***/
@@ -319,28 +319,30 @@ class MySQLDB {
         $parsed_gm_ids = array();
 
         // Get the person ID(s) of the GMs already in the DB
-        if (is_array($existing_gm_data) && isset($existing_gm_data[$sessionID])) {
-          $existing_gm_ids = array_keys($existing_gm_data[$sessionID]);
+        if (is_array($existing_gm_data)
+            && isset($existing_gm_data[$session->getSessionID()])) {
+          $existing_gm_ids = array_keys($existing_gm_data[$session->getSessionID()]);
         }//end if
 
         // Insert the GM details into the DB
-        foreach ($session['gms'] as $gm) {
+        foreach ($session->getGMs() as $gm) {
           $numberofGMsTotal++;
 
           // Fetch the person ID
-          $personID = $this->insertAndGetPersonID($sth_person_select
-                                                  , $sth_person_insert
-                                                  , $gm['name']
-                                                  , $gm['email']
-                                                  , $gm['pfs_number']);
+          $gm->setPersonID($this->insertAndGetPersonID($sth_person_select
+                                                       , $sth_person_insert
+                                                       , $gm->getName()
+                                                       , $gm->getEMail()
+                                                       , $gm->getPFSNumber()));
 
-          if (false === array_search($personID, $existing_gm_ids)) {
+          if (false === array_search($gm->getPersonID(), $existing_gm_ids)) {
             // This GM isn't already in the list, insert it
             $numberofGMsInserted++;
 
-            $sth_gm_insert->bindValue(":SessionID", $sessionID);
-            $sth_gm_insert->bindValue(":PersonID", $personID);
-            $sth_gm_insert->bindValue(":SignedUpOn", $gm['signed_up_at']);
+            $sth_gm_insert->bindValue(":SessionID", $session->getSessionID());
+            $sth_gm_insert->bindValue(":PersonID", $gm->getPersonID());
+            $sth_gm_insert->bindValue(":SignedUpOn", $gm->getSignedUpOn());
+            $sth_gm_insert->bindValue(":NotificationSent", $gm->getNotificationSent());
 
             $sth_gm_insert->execute();
             $this->errorHandler($sth_gm_insert->errorInfo(), "GM insert");
@@ -348,7 +350,7 @@ class MySQLDB {
 
           // Add this GM to the list of GMs (for use in determining which GMs
           // are no longer needed in the DB)
-          $parsed_gm_ids[] = $personID;
+          $parsed_gm_ids[] = $gm->getPersonID();
 
         }//end foreach($gm)
 
@@ -358,7 +360,7 @@ class MySQLDB {
         if (count($gms_to_remove) > 0) {
           // We have GMs to remove
           foreach($gms_to_remove as $gm_to_remove) {
-            $sth_gm_delete->bindValue(":SessionID", $sessionID);
+            $sth_gm_delete->bindValue(":SessionID", $session->getSessionID());
             $sth_gm_delete->bindValue(":PersonID", $gm_to_remove);
 
             $sth_gm_delete->execute();
@@ -371,29 +373,34 @@ class MySQLDB {
         $parsed_player_ids = array();
 
         // Get the person ID(s) of the players already in the DB
-        if (is_array($existing_player_data) && isset($existing_player_data[$sessionID])) {
-          $existing_player_ids = array_keys($existing_player_data[$sessionID]);
+        if (is_array($existing_player_data)
+            && isset($existing_player_data[$session->getSessionID()])) {
+          $existing_player_ids = array_keys($existing_player_data[$session->getSessionID()]);
         }
 
+        if (!is_array($session->getPlayers())) {
+          echo "Event: {$event->getEventName()} | Session: {$session->getSessionNumber()}\n";
+          echo "val: \n"; var_dump($session->getPlayers()); echo "\n";
+        }
         // Insert the players for this session
-        foreach ($session['players'] as $player) {
+        foreach ($session->getPlayers() as $player) {
           $numberofPlayersTotal++;
-          $personID = $this->insertAndGetPersonID($sth_person_select
-                                                  , $sth_person_insert
-                                                  , $player['name']
-                                                  , $player['email']
-                                                  , $player['pfs_number']);
+          $player->setPersonID($this->insertAndGetPersonID($sth_person_select
+                                                           , $sth_person_insert
+                                                           , $player->getName()
+                                                           , $player->getEMail()
+                                                           , $player->getPFSNumber()));
 
-          if (false === array_search($personID, $existing_player_ids)) {
+          if (false === array_search($player->getPersonID(), $existing_player_ids)) {
             // This player isn't already in the list, insert it
 
             $numberOfPlayersInserted++;
 
-            $sth_player_insert->bindValue(":SessionID", $sessionID);
-            $sth_player_insert->bindValue(":PersonID", $personID);
-            $sth_player_insert->bindValue(":SignedUpOn", $player['signed_up_at']);
-            $sth_player_insert->bindValue(":CharacterClass", $player['character-class']);
-            $sth_player_insert->bindValue(":CharacterRole", $player['character-role']);
+            $sth_player_insert->bindValue(":SessionID", $session->getSessionID());
+            $sth_player_insert->bindValue(":PersonID", $player->getPersonID());
+            $sth_player_insert->bindValue(":SignedUpOn", $player->getSignedUpOn());
+            $sth_player_insert->bindValue(":CharacterClass", $player->getCharacterClass());
+            $sth_player_insert->bindValue(":CharacterRole", $player->getCharacterRole());
 
             $sth_player_insert->execute();
             $this->errorHandler($sth_player_insert->errorInfo(), "Player insert");
@@ -401,7 +408,7 @@ class MySQLDB {
 
           // Add this player to the list of players (for use in determining which players
           // are no longer needed in the DB)
-          $parsed_player_ids[] = $personID;
+          $parsed_player_ids[] = $player->getPersonID();
 
         }//end foreach($player)
 
@@ -412,7 +419,7 @@ class MySQLDB {
           // We have players to remove
 
           foreach($players_to_remove as $player_to_remove) {
-            $sth_player_delete->bindValue(":SessionID", $sessionID);
+            $sth_player_delete->bindValue(":SessionID", $session->getSessionID());
             $sth_player_delete->bindValue(":PersonID", $player_to_remove);
 
             $sth_player_delete->execute();
