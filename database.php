@@ -106,10 +106,10 @@ class MySQLDB {
 
     $sth = $dbh->prepare($q);
 
-    //$sth->bindValue(":StartTimestamp", date("c", mktime(0, 0, 0)));
-    //$sth->bindValue(":EndTimestamp", date("c", mktime(23, 59, 59)));
-    $sth->bindValue(":StartTimestamp", date("c", mktime(0, 0, 0, 11, 21, 2014)));
-    $sth->bindValue(":EndTimestamp", date("c", mktime(23, 59, 59, 11, 21, 2014)));
+    $sth->bindValue(":StartTimestamp", date("c", mktime(0, 0, 0)));
+    $sth->bindValue(":EndTimestamp", date("c", mktime(23, 59, 59)));
+    //$sth->bindValue(":StartTimestamp", date("c", mktime(0, 0, 0, 11, 21, 2014)));
+    //$sth->bindValue(":EndTimestamp", date("c", mktime(23, 59, 59, 11, 21, 2014)));
 
     $sth->execute();
 
@@ -319,10 +319,10 @@ class MySQLDB {
     // Insert everything into the DB
     foreach ($events as $key=>$event) {
       //@TODO UNCOMMENT THIS ONCE JSON DATA IS AVABILABLE
-      // if ($event->getEventStart() < time()) {
-      //   // This event is the past, we don't need to process it
-      //   continue;
-      // }//end if
+      if ($event->getEventStart() < time()) {
+        // This event is the past, we don't need to process it
+        continue;
+      }//end if
 
       $sth_event_select->bindValue(":EventName", $key);
       $sth_event_select->bindValue(":EventStartTimestamp", date("c", $event->getEventStart()));
@@ -356,13 +356,6 @@ class MySQLDB {
 
       /*** Session ***/
       foreach ($event->getSessions() as $sessionNumber=>$session) {
-
-        // Check if we are processing the start-timestamp or end-timestamp array element
-        // if (!is_numeric($sessionNumber)) {
-        //   // There is nothing to process here, skip this entry
-
-        //   continue;
-        // }//end if
 
         $sth_session_select->bindValue(":EventID", $event->getEventID());
         $sth_session_select->bindValue(":SessionNumber", $session->getSessionNumber());
@@ -599,10 +592,12 @@ class MySQLDB {
                    ON EG.SessionID = S.SessionID
                  INNER JOIN PersonMaster PM
                    ON EG.PersonID = PM.PersonID
+           WHERE E.EventStartTimestamp >= :CurrentTimestamp
            ORDER BY EG.SessionID ASC
                     , EG.ID";
 
       $sth = $dbh->prepare($q);
+      $sth->bindValue(":CurrentTimestamp", date("c", time()));
 
       $sth->execute();
 
@@ -640,10 +635,12 @@ class MySQLDB {
                    ON EP.SessionID = S.SessionID
                  INNER JOIN PersonMaster PM
                    ON EP.PersonID = PM.PersonID
+           WHERE E.EventStartTimestamp >= :CurrentTimestamp
            ORDER BY EP.SessionID ASC
                     , EP.ID";
 
     $sth = $dbh->prepare($q);
+    $sth->bindValue(":CurrentTimestamp", date("c", time()));
     $sth->execute();
     $result = $sth->fetchAll(PDO::FETCH_ASSOC);
 
