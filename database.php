@@ -87,6 +87,89 @@ class MySQLDB {
     $dbh = null;
   }//END function disconnect($dbh)
 
+  public function getEventsStartingToday() {
+    $q = "SELECT E.ID
+                 , E.EventName
+                 , S.SessionID
+                 , S.ScenarioName
+                 , S.ScenarioMinLevel
+                 , S.ScenarioMaxLevel
+                 , S.TableCount
+                 , S.TableSize
+            FROM Sessions S
+                     LEFT JOIN Events E
+                         ON S.EventID = E.ID
+           WHERE E.EventStartTimestamp
+                 BETWEEN :StartTimestamp
+                     AND :EndTimestamp";
+    $dbh = $this->connect();
+
+    $sth = $dbh->prepare($q);
+
+    //$sth->bindValue(":StartTimestamp", date("c", mktime(0, 0, 0)));
+    //$sth->bindValue(":EndTimestamp", date("c", mktime(23, 59, 59)));
+    $sth->bindValue(":StartTimestamp", date("c", mktime(0, 0, 0, 11, 21, 2014)));
+    $sth->bindValue(":EndTimestamp", date("c", mktime(23, 59, 59, 11, 21, 2014)));
+
+    $sth->execute();
+
+    $db_data = $sth->fetchAll(PDO::FETCH_ASSOC);
+
+    $this->disconnect($dbh);
+
+    return $db_data;
+  }//END getEventsStartingToday()
+
+  public function getGMs($sessionID) {
+    $dbh = $this->connect();
+
+    $q = "SELECT PM.PersonName
+                 , PM.PersonPFSNumber
+                 , PM.PersonEMail
+            FROM EventGMs EG
+                   LEFT JOIN PersonMaster PM
+                     ON EG.PersonID = PM.PersonID
+           WHERE EG.SessionID = :SessionID";
+
+    $sth = $dbh->prepare($q);
+    $sth->bindValue(":SessionID", $sessionID);
+
+    $sth->execute();
+
+    $retval = $sth->fetchAll(PDO::FETCH_ASSOC);
+
+    $this->disconnect($dbh);
+
+    return $retval;
+
+  }//END public function getGMs($sessionID)
+
+  public function getPlayers($sessionID) {
+    $dbh = $this->connect();
+
+    $q = "SELECT PM.PersonName
+                 , PM.PersonPFSNumber
+                 , EP.CharacterClass
+                 , EP.CharacterRole
+            FROM EventPlayers EP
+                   LEFT JOIN PersonMaster PM
+                     ON EP.PersonID = PM.PersonID
+           WHERE EP.SessionID = :SessionID
+           ORDER BY EP.SignedUpOn ASC";
+
+    $sth = $dbh->prepare($q);
+    $sth->bindValue(":SessionID", $sessionID);
+
+    $sth->execute();
+
+    $retval = $sth->fetchAll(PDO::FETCH_ASSOC);
+
+    $this->disconnect($dbh);
+
+    return $retval;
+  }
+
+
   /**
    * Saves new data and removes data which is no longer valid from the DB.
    *
@@ -140,6 +223,7 @@ class MySQLDB {
                           , ScenarioMinLevel
                           , ScenarioMaxLevel
                           , TableCount
+                          , TableSize
                           , InsertedOn
                         ) VALUES (
                           :EventID
@@ -148,6 +232,7 @@ class MySQLDB {
                           , :ScenarioMinLevel
                           , :ScenarioMaxLevel
                           , :TableCount
+                          , :TableSize
                           , CURRENT_TIMESTAMP()
                         )";
 
@@ -301,6 +386,7 @@ class MySQLDB {
           $sth_session_insert->bindValue(":ScenarioMinLevel", $session->getScenarioMinLevel());
           $sth_session_insert->bindValue(":ScenarioMaxLevel", $session->getScenarioMaxLevel());
           $sth_session_insert->bindValue(":TableCount", $session->getTableCount());
+          $sth_session_insert->bindValue(":TableSize", $session->getTableSize());
 
           $sth_session_insert->execute();
           $this->errorHandler($sth_session_insert->errorInfo(), "Session insert");

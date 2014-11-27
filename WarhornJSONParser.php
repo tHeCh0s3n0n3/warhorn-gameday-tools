@@ -42,6 +42,7 @@ class WarhornJSONParser {
         $new_session->setScenarioMinLevel($session['scenario']['min_level']);
         $new_session->setScenarioMaxLevel($session['scenario']['max_level']);
         $new_session->setTableCount($session['table_count']);
+        $new_session->setTableSize($session['table_size']);
 
         foreach ($session['gms'] as $gm) {
           $new_gm = new GM();
