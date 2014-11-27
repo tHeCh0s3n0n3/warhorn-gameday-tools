@@ -22,13 +22,16 @@ class Person extends MyObject {
    }//END public Person()
 
    public function extractAndSetPFSNumber($person) {
-      if (is_array($person['organized_play_memberships'])
-          && isset($person['organized_play_memberships']['network'])
-          && "Pathfinder Society" == $person['organized_play_memberships']['network']) {
-         $this->_PFSNumber = $person['organized_play_memberships']['member_number'];
+      if (is_array($person['organized_play_memberships'])) {
+         foreach($person['organized_play_memberships'] as $membership) {
+            if (isset($membership['network'])
+                && "Pathfinder Society" == $membership['network']) {
+               $this->_PFSNumber = $membership['member_number'];
+            }
+         }
       } else {
          $this->_PFSNumber = "";
-      }
+      }//end else
    }//END public function extractPFSNumber($person)
 
 }//END class Person

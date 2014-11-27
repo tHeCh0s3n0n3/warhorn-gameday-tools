@@ -12,6 +12,7 @@ class Session extends MyObject {
    protected $_ScenarioMinLevel;
    protected $_ScenarioMaxLevel;
    protected $_TableCount;
+   protected $_TableSize;
    protected $_GMs;
    protected $_Players;
 
@@ -24,6 +25,7 @@ class Session extends MyObject {
       $this->_ScenarioMinLevel = (int) 0;
       $this->_ScenarioMaxLevel = (int) 0;
       $this->_TableCount = (int) 0;
+      $this->_TableSize = (int) 0;
       $this->_GMs = array();
       $this->_Players = array();
 
