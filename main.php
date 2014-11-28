@@ -7,15 +7,24 @@ require_once("WarhornJSONParser.php");
 require_once("database.php");
 require_once("email.php");
 
-// $mailer->setDebugLevel(3);
 
 
+$json = RetrieveEventJSONData();
+
+$events = $warhornJSONParser->parseJSON($json);
+
+// Save the info to the DB
+$db->storeAllDataToDB($events);
+
+// Send the e-mail
 $db_data = $db->getEventsStartingToday();
 foreach ($db_data as $event) {
    // Retrieve the GM data since we'll need it here
    $gm_data = $db->getGMs($event['SessionID']);
 
    $mailer = new EMail();
+
+   // $mailer->setDebugLevel(3);
 
    foreach ($gm_data as $gm) {
       $mailer->addToEMailAddress($gm['PersonEMail'], $gm['PersonName']);
@@ -26,21 +35,16 @@ foreach ($db_data as $event) {
 
    echo $mailer->getBody();
 
-   // if ($mailer->send()) {
-   //    echo "EMail sent!\n";
-   // } else {
-   //    echo "EMail ***NOT*** sent.\n";
-   // }
+   if ($mailer->send()) {
+      echo "EMail sent!\n";
+   } else {
+      echo "EMail ***NOT*** sent.\n";
+   }
 }//end foreach
 
 
 
 
 
-// $json = RetrieveEventJSONData();
 
-// $events = $warhornJSONParser->parseJSON($json);
-
-// // Save the info to the DB
-// $db->storeAllDataToDB($events);
 echo "done\n";
