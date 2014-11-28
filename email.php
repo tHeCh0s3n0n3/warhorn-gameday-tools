@@ -81,23 +81,33 @@ class EMail {
       $email_body = "<html>
                        <head></head>
                        <body>
-                         <h1 style=\"color: #753502;\">
+                         <h1 style\"color: #753502;\">
                            Warhorn Gameday Information for <br />
                            {$event['EventName']}
                          </h1>
-                         <p>Dear GM(s);</p>
-                         <p>Here is the information for &quot;<strong>{$event['ScenarioName']}</strong>&quot;:</p>
-                         <table>
+                         <h2 style\"color: #753502;\">Table Information</h2>
+                         <table class=\"generalTable\">
                            <tr>
-                              <td style=\"text-align: right;\"># of tables:</td>
+                              <td style=\"text-align: right; vertical-align: top; font-weight: bold;\">
+                                Scenario:
+                              </td>
+                              <td>{$event['ScenarioName']}</td>
+                           </tr>
+                           <tr>
+                              <td style=\"text-align: right; vertical-align: top; font-weight: bold;\">
+                                # of tables:
+                              </td>
                               <td>{$event['TableCount']}</td>
                            </tr>
                            <tr>
-                              <td style=\"text-align: right; vertical-align: top;\">GM(s):</td>
+                              <td style=\"text-align: right; vertical-align: top; font-weight: bold;\">
+                                GM(s):
+                              </td>
                               <td>{$gms_list}</td>
                            </tr>
                          </table>
-                         <h2>Confirmed Players ({$player_tables['confirmed_count']} / {$event['TableSize']}):</h2>
+
+                         <h2 style\"color: #753502;\">Confirmed Players ({$player_tables['confirmed_count']} / {$event['TableSize']}):</h2>
                          <table style=\"border: 1px solid #000; border-collapse: collapse;\">
                            {$player_tables['confirmed']}
                          </table>";
@@ -108,7 +118,8 @@ class EMail {
                          </table>";
       }//end if
 
-      $email_body .= "</body>
+      $email_body .= " <h2 style\"color: #753502;\">Happy Gaming</h2>
+                      </body>
                      </html>";
 
       $this->setBody($email_body, true);
